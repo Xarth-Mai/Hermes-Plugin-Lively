@@ -60,6 +60,15 @@ Using `/root/.config/hermes/github.env`, pushing the local fix returned HTTP 403
 
 Pinned Hermes can treat a missing/interpreter-failed/invalid-output gate script as wake-allowed. The script catches ordinary Python exceptions and returns `{"wakeAgent":false}`, but cannot enforce hard quotas if the host never executes it. No upstream patch is authorized; these controls are not an absolute safety boundary against catastrophic host failure.
 
+## Follow-up after explicit SSH authorization — 2026-11-15
+
+- Pushed the local fixes and initial acceptance record through the existing GitHub SSH identity, without changing global Git configuration or credentials. Remote feature head was read back as `dda7de153d3f714c8041c9babce69eaff5fb46b4`.
+- All eight push/PR check runs for that head passed: Python 3.11/3.12/3.13 and pinned Hermes contract. The earlier PAT write failure is no longer a push blocker; that token itself was not changed.
+- Investigated the installed **python-hermes-agent 0.23.0-1**, rather than assuming the older `/ssk/python-hermes-agent` working tree describes the running package. The wrapper already sets `HERMES_INSTALL_ROOT=/usr/share/hermes-agent`; the stamp there declares `updateMechanism=external`.
+- The native plugin admission calls `pm.client.sync_venv` for every candidate selection. `pm.paths.repo_root()` nevertheless resolves from the installed module to `/usr/lib/python3.14/site-packages`; `Venv.expected_stamp()` reads that root's `uv.lock`, and `Venv.apply()` builds a managed dependency generation from that source root. The package contains `pm/uv.lock` (PM's own runtime lock), not the missing core project lock. Those locks are not interchangeable.
+- Thus merely adding a placeholder, copying PM's lock to the core path, or changing the asset-root environment does not repair admission. Even a genuine core lock by itself would not establish that replacing a distro-managed dependency environment is supported. No such workaround, source patch, manual enablement, or Gateway restart was performed.
+- Remaining boundary: repair the externally managed host's native plugin admission/packaging contract before production installation and real delivery acceptance. This is outside Lively's implementation; the existing no-Hermes-source-change constraint remains in force. PR remains unmerged and production remains disabled.
+
 ## Earlier handoff results (historical only)
 
 The original handoff reported 14 tests on Python 3.13.5 and green [Actions run 43631122552](https://github.com/Xarth-Mai/Hermes-Plugin-Lively/actions/runs/43631122552). Those results do not replace the current run or establish real delivery.
