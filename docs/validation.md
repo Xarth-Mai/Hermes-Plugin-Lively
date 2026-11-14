@@ -4,7 +4,7 @@ Implementation branch: `feat/lively-minimal-v02`. This document records the chec
 
 ## Automated checks
 
-Local verification on Python 3.13.5: **14 unit tests passed**, asset validator passed, and Python source compilation passed. `ruff` and the pinned Hermes checkout were not available in this runtime, so those results are **not yet verified**.
+Local verification on Python 3.13.5: **14 unit tests passed**, asset validator passed, and Python source compilation passed. GitHub Actions run [43631122552](https://github.com/Xarth-Mai/Hermes-Plugin-Lively/actions/runs/43631122552) passed the Python 3.11/3.12/3.13 unit matrices (including Ruff and asset checks) and the pinned Hermes contract. Live delivery remains unverified.
 
 - Python 3.11+ unit tests: initial defaults, probability overrides, cross-midnight quiet hours, rolling 24-hour / 7-day limits, concurrent claims, invalid state, stable script preparation, folder metadata, import/removal, path validation, parallel import and non-destructive legacy-gallery migration.
 - Asset verification: original PNG assets and their corresponding folder metadata.

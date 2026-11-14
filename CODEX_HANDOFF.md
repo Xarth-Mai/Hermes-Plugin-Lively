@@ -14,7 +14,7 @@
 
 ## Verified locally vs pending
 
-Local Python 3.13.5: 14 unit tests passed, bundled-asset validation passed, source compilation passed. Ruff, pinned Hermes Plugin Doctor/contract, GitHub CI and live channel delivery are **pending**, not claimed as passed. The complete original PNG blobs are preserved in the Git branch; the downloadable source snapshot is intended as a handoff aid and should not override the Git branch.
+Local Python 3.13.5: 14 unit tests passed, bundled-asset validation passed, source compilation passed. [GitHub Actions run 43631122552](https://github.com/Xarth-Mai/Hermes-Plugin-Lively/actions/runs/43631122552) passed the Python 3.11/3.12/3.13 unit matrices (including Ruff and asset checks) and the pinned Hermes Plugin Doctor/Cron contract. Real channel delivery is **pending**. The complete original PNG blobs are preserved in the Git branch; the downloadable source snapshot is intended as a handoff aid and should not override the Git branch.
 
 ## Suggested Codex review path
 
