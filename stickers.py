@@ -34,7 +34,11 @@ def image_path(folder: Path, filename: str) -> Path:
         raise LivelyError("Invalid gallery image path")
     if not 0 < path.stat().st_size <= MAX_BYTES:
         raise LivelyError("Invalid gallery image size")
-    kind = image_kind(path.read_bytes())
+    with path.open("rb") as stream:
+        header = stream.read(64)
+        stream.seek(-8, os.SEEK_END)
+        footer = stream.read(8)
+    kind = image_kind(header + footer)
     if path.suffix.lower() not in ({"png": {".png"}, "jpg": {".jpg", ".jpeg"}, "gif": {".gif"}}[kind]):
         raise LivelyError("Image extension does not match its data")
     return path.resolve()
@@ -59,7 +63,8 @@ class Gallery:
     def _migrate_legacy(self):
         """Copy old gallery/manifest.json content non-destructively into a legacy group."""
         manifest = self.personal / "manifest.json"
-        if not manifest.exists():
+        marker = self.personal / ".legacy-migrated"
+        if marker.is_file() or not manifest.exists():
             return
         if manifest.is_symlink():
             raise LivelyError("Refusing legacy manifest symlink")
@@ -98,7 +103,8 @@ class Gallery:
                 changed = True
             if changed or not info_path.exists():
                 atomic_json(info_path, info)
-            # Original manifest/assets remain for rollback; follow-up access is idempotent.
+            atomic_bytes(marker, b"legacy-imported\n")
+            # Original manifest/assets remain for rollback; later access skips migration.
 
     def entries(self):
         self._migrate_legacy()

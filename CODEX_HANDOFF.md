@@ -12,6 +12,10 @@
 - Installation stays opt-in: plugin installation must not automatically create/send Cron. `INSTALL.md` is the first-time Agent workflow; README shows both prompt and one-liner entries.
 - No Weixin-specific hook, cross-channel duplicate state, custom sender or additional Agent. New gallery keeps earlier user images non-destructively.
 
+## Verified locally vs pending
+
+Local Python 3.13.5: 14 unit tests passed, bundled-asset validation passed, source compilation passed. Ruff, pinned Hermes Plugin Doctor/contract, GitHub CI and live channel delivery are **pending**, not claimed as passed. The complete original PNG blobs are preserved in the Git branch; the downloadable source snapshot is intended as a handoff aid and should not override the Git branch.
+
 ## Suggested Codex review path
 
 1. Fetch this branch and compare it with `main`; check all removals and modified tests. Preserve unrelated changes from other contributors.

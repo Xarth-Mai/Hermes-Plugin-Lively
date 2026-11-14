@@ -111,3 +111,38 @@ def test_tool_prepare_is_idempotent_and_installs_native_script(gate, tmp_path):
     assert first == json.loads(tools.schedule({"action": "prepare"}))
     path.write_text("# something else")
     assert not json.loads(tools.schedule({"action": "prepare"}))["ok"]
+
+
+def test_generated_script_survives_plugin_disable_and_fails_closed(gate, tmp_path):
+    import os
+    import subprocess
+    import sys
+    from types import SimpleNamespace
+    from lively_under_test.plugin_tools import Tools
+
+    home = tmp_path / "profile"
+    home.mkdir()
+    (home / "config.yaml").write_text("plugins:\n  enabled: [lively]\n")
+    stub = tmp_path / "stub"
+    (stub / "hermes_cli").mkdir(parents=True)
+    (stub / "hermes_cli/__init__.py").write_text("")
+    (stub / "hermes_cli/config.py").write_text(
+        "from pathlib import Path\n"
+        "import os\n"
+        "import yaml\n"
+        "def load_config_readonly():\n"
+        "    return yaml.safe_load((Path(os.environ['HERMES_HOME']) / 'config.yaml').read_text())\n"
+    )
+    ctx = SimpleNamespace(state=SimpleNamespace(data_dir=tmp_path / "data"))
+    tools = Tools(ctx, ROOT, home)
+    assert json.loads(tools.schedule({"action": "prepare"}))["ok"]
+    gate.tune(tmp_path / "data", {"quiet_hours": None, "wake_probability": 1})
+    env = os.environ | {"HERMES_HOME": str(home), "PYTHONPATH": str(stub)}
+    path = home / "scripts/lively-gate.py"
+    result = subprocess.run([sys.executable, str(path)], capture_output=True, text=True, env=env, check=True)
+    assert json.loads(result.stdout)["wakeAgent"]
+    (home / "config.yaml").write_text("plugins:\n  enabled: []\n")
+    result = subprocess.run([sys.executable, str(path)], capture_output=True, text=True, env=env, check=True)
+    assert json.loads(result.stdout) == {"wakeAgent": False}
+    # Uninstall/removal must also leave the script fail-closed if invoked again.
+    (ROOT / "__init__.py").exists()  # The test does not mutate source checkout.

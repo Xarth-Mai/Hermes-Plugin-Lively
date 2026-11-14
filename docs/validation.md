@@ -4,6 +4,8 @@ Implementation branch: `feat/lively-minimal-v02`. This document records the chec
 
 ## Automated checks
 
+Local verification on Python 3.13.5: **14 unit tests passed**, asset validator passed, and Python source compilation passed. `ruff` and the pinned Hermes checkout were not available in this runtime, so those results are **not yet verified**.
+
 - Python 3.11+ unit tests: initial defaults, probability overrides, cross-midnight quiet hours, rolling 24-hour / 7-day limits, concurrent claims, invalid state, stable script preparation, folder metadata, import/removal, path validation, parallel import and non-destructive legacy-gallery migration.
 - Asset verification: original PNG assets and their corresponding folder metadata.
 - Pinned Hermes host contract: plugin registration, tool/Skill exposure, Cron creation, script gate behavior and continuity options. Run via `python scripts/check-hermes.py --source /path/to/hermes-agent` at the pinned source SHA `bfe20f5586b3a26259f71669ad49ac85bd173f10`.
