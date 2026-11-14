@@ -27,7 +27,7 @@ def image_kind(data: bytes) -> str:
 def image_path(folder: Path, filename: str) -> Path:
     if not isinstance(filename, str) or Path(filename).name != filename or filename in (".", ".."):
         raise LivelyError("Invalid sticker filename")
-    if folder.is_symlink():
+    if any(part.is_symlink() for part in (folder, *folder.parents)):
         raise LivelyError("Gallery folder is a symlink")
     path = folder / filename
     if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(folder.resolve()):
