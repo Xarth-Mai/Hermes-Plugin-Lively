@@ -62,6 +62,8 @@ class Gallery:
 
     def _migrate_legacy(self):
         """Copy old gallery/manifest.json content non-destructively into a legacy group."""
+        if any(part.is_symlink() for part in (self.personal, *self.personal.parents)):
+            raise LivelyError("Refusing legacy gallery root symlink")
         manifest = self.personal / "manifest.json"
         marker = self.personal / ".legacy-migrated"
         if marker.is_file() or not manifest.exists():
@@ -86,9 +88,14 @@ class Gallery:
             for item in items:
                 if not isinstance(item, dict) or not isinstance(item.get("file"), str):
                     raise LivelyError("Invalid legacy gallery entry")
-                source = (self.personal / item["file"]).resolve()
+                source = self.personal / item["file"]
+                if any(part.is_symlink() for part in (source, *source.parents)):
+                    raise LivelyError("Refusing legacy image symlink")
+                source = source.resolve()
                 if not source.is_relative_to((self.personal / "images").resolve()) or not source.is_file():
                     raise LivelyError("Invalid legacy gallery path")
+                if not 0 < source.stat().st_size <= MAX_BYTES:
+                    raise LivelyError("Invalid legacy gallery image size")
                 content = source.read_bytes()
                 kind = image_kind(content)
                 name = hashlib.sha256(content).hexdigest()[:32] + "." + kind
