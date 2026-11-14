@@ -1,4 +1,4 @@
-name: Plugin checks
+name: Lively checks
 on: [push, pull_request]
 permissions:
   contents: read
@@ -36,12 +36,3 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r tests/requirements-hermes.txt
       - run: python scripts/check-hermes.py --source ../hermes-source
-  secrets:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

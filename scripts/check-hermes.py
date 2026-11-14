@@ -1,5 +1,4 @@
-"""Run the offline, pinned-host contract harness (kept with integration tests)."""
-
+"""Offline pinned Hermes contract runner; delegates to the separate integration test."""
 from pathlib import Path
 import runpy
 

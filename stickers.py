@@ -1,174 +1,209 @@
-"""Local gallery: bounded imports, immutable builtins, safe owned paths and lexical search."""
+"""Folder-organized sticker gallery. Each folder owns one metadata.json."""
 
 from __future__ import annotations
-
-from contextlib import contextmanager
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
 import stat
-import struct
-import uuid
 
-from .common import LivelyError, atomic_write, read_json, write_json
+from .gate import LivelyError, atomic_bytes, atomic_json, transaction
 
 MAX_BYTES = 10 * 1024 * 1024
+FOLDER = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}\Z")
 
 
-def image_type(data: bytes) -> str:
-    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 33 and data[12:16] == b"IHDR":
-        width, height = struct.unpack(">II", data[16:24])
-        if width and height and data[-8:-4] == b"IEND":
-            return "png"
+def image_kind(data: bytes) -> str:
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 33 and data[12:16] == b"IHDR" and data[-8:-4] == b"IEND":
+        return "png"
     if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 14 and data[-1:] == b";":
-        if all(struct.unpack("<HH", data[6:10])):
-            return "gif"
+        return "gif"
     if data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9"):
-        return "jpeg"
-    raise LivelyError("Not a supported PNG, JPEG or GIF. Export a valid image and retry.")
+        return "jpg"
+    raise LivelyError("Unsupported or invalid image; use PNG, JPEG or GIF")
 
 
-def checked_file(base: Path, relative: str) -> Path:
-    if not isinstance(relative, str) or Path(relative).is_absolute() or ".." in Path(relative).parts:
-        raise LivelyError("Invalid gallery path. Repair the gallery manifest.")
-    path = base / relative
-    current = path
-    while current != base.parent:
-        if current.is_symlink():
-            raise LivelyError("Gallery symlinks are not allowed.")
-        if current == base:
-            break
-        current = current.parent
-    resolved = path.resolve(strict=True)
-    if not resolved.is_relative_to(base.resolve()) or not resolved.is_file():
-        raise LivelyError("Gallery path escaped its root or is not a file.")
-    return resolved
+def image_path(folder: Path, filename: str) -> Path:
+    if not isinstance(filename, str) or Path(filename).name != filename or filename in (".", ".."):
+        raise LivelyError("Invalid sticker filename")
+    if folder.is_symlink():
+        raise LivelyError("Gallery folder is a symlink")
+    path = folder / filename
+    if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(folder.resolve()):
+        raise LivelyError("Invalid gallery image path")
+    if not 0 < path.stat().st_size <= MAX_BYTES:
+        raise LivelyError("Invalid gallery image size")
+    kind = image_kind(path.read_bytes())
+    if path.suffix.lower() not in ({"png": {".png"}, "jpg": {".jpg", ".jpeg"}, "gif": {".gif"}}[kind]):
+        raise LivelyError("Image extension does not match its data")
+    return path.resolve()
+
+
+def read_group(folder: Path):
+    meta = folder / "metadata.json"
+    if meta.is_symlink():
+        raise LivelyError("Gallery metadata symlinks are not allowed")
+    obj = json.loads(meta.read_text(encoding="utf-8"))
+    if not isinstance(obj, dict) or not isinstance(obj.get("name"), str) or not isinstance(obj.get("description"), str) or not isinstance(obj.get("items"), dict):
+        raise LivelyError("Invalid folder metadata")
+    if any(not isinstance(k, str) or Path(k).name != k or k in (".", "..") or not isinstance(v, str) or len(v) > 1000 for k, v in obj["items"].items()):
+        raise LivelyError("Invalid sticker description")
+    return obj
 
 
 class Gallery:
-    def __init__(self, root: Path, data: Path, store):
-        self.builtin = root / "assets" / "stickers"
-        self.directory = data / "gallery"
-        self.store = store
+    def __init__(self, builtin: Path, personal: Path, data: Path):
+        self.builtin, self.personal, self.data = map(Path, (builtin, personal, data))
 
-    @contextmanager
-    def locked(self):
-        # Reuse the cross-process database write lock to serialize manifest mutations/readers.
-        with self.store.transaction() as db:
-            if self.directory.is_symlink() or (self.directory / "images").is_symlink():
-                raise LivelyError("Gallery directories must not be symlinks.")
-            self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            (self.directory / "images").mkdir(exist_ok=True, mode=0o700)
-            path = self.directory / "manifest.json"
-            if path.is_symlink():
-                raise LivelyError("Gallery manifest must not be a symlink.")
-            items = read_json(path) if path.exists() else []
+    def _migrate_legacy(self):
+        """Copy old gallery/manifest.json content non-destructively into a legacy group."""
+        manifest = self.personal / "manifest.json"
+        if not manifest.exists():
+            return
+        if manifest.is_symlink():
+            raise LivelyError("Refusing legacy manifest symlink")
+        if (self.personal / "images").is_symlink():
+            raise LivelyError("Refusing legacy images symlink")
+        with transaction(self.data, create=True):
+            items = json.loads(manifest.read_text(encoding="utf-8"))
             if not isinstance(items, list):
-                raise LivelyError("Invalid gallery manifest. Restore a valid JSON list.")
-            yield db, path, items
-
-    def _entry(self, item: dict, source: str, base: Path):
-        path = checked_file(base, item["file"])
-        if path.stat().st_size > MAX_BYTES:
-            raise LivelyError("Gallery image exceeds 10 MiB.")
-        kind = image_type(path.read_bytes())
-        return {
-            "id": item["id"],
-            "description": item["description"],
-            "tags": item["tags"],
-            "source": source,
-            "type": kind,
-            "absolute_path": str(path),
-        }
+                raise LivelyError("Invalid legacy gallery manifest")
+            dest = self.personal / "legacy"
+            if dest.is_symlink():
+                raise LivelyError("Refusing legacy folder symlink")
+            dest.mkdir(parents=True, exist_ok=True)
+            info_path = dest / "metadata.json"
+            info = read_group(dest) if info_path.exists() else {
+                "name": "Earlier imports", "description": "Images imported before folder galleries", "items": {}
+            }
+            changed = False
+            for item in items:
+                if not isinstance(item, dict) or not isinstance(item.get("file"), str):
+                    raise LivelyError("Invalid legacy gallery entry")
+                source = (self.personal / item["file"]).resolve()
+                if not source.is_relative_to((self.personal / "images").resolve()) or not source.is_file():
+                    raise LivelyError("Invalid legacy gallery path")
+                content = source.read_bytes()
+                kind = image_kind(content)
+                name = hashlib.sha256(content).hexdigest()[:32] + "." + kind
+                if name in info["items"]:
+                    continue
+                target = dest / name
+                if target.exists() and target.read_bytes() != content:
+                    raise LivelyError("Legacy image collision")
+                if not target.exists():
+                    atomic_bytes(target, content)
+                info["items"][name] = str(item.get("description", "Imported sticker"))[:1000]
+                changed = True
+            if changed or not info_path.exists():
+                atomic_json(info_path, info)
+            # Original manifest/assets remain for rollback; follow-up access is idempotent.
 
     def entries(self):
-        builtin = read_json(self.builtin / "manifest.json")
-        with self.locked() as (_, _, items):
-            return [self._entry(x, "builtin", self.builtin) for x in builtin] + [
-                self._entry(x, "user", self.directory) for x in items
-            ]
+        self._migrate_legacy()
+        results = []
+        for source, root in (("builtin", self.builtin), ("user", self.personal)):
+            if not root.exists():
+                continue
+            if root.is_symlink():
+                raise LivelyError("Invalid gallery root symlink")
+            for folder in sorted(root.iterdir()):
+                if not folder.is_dir() or folder.is_symlink() or not (folder / "metadata.json").is_file():
+                    continue
+                meta = read_group(folder)
+                for filename, description in meta["items"].items():
+                    path = image_path(folder, filename)
+                    results.append({
+                        "id": f"{source}:{folder.name}/{filename}", "folder": folder.name,
+                        "name": meta["name"], "group_description": meta["description"],
+                        "description": description, "source": source, "absolute_path": str(path),
+                    })
+        return results
 
-    def search(self, query: str = "", limit: int = 10):
+    def search(self, query: str = "", limit: int = 20):
         if not isinstance(query, str) or len(query) > 500 or type(limit) is not int or not 1 <= limit <= 50:
-            raise LivelyError("Use a query up to 500 characters and limit between 1 and 50.")
+            raise LivelyError("Use a query <=500 chars and limit 1..50")
         terms = re.findall(r"\w+", query.casefold())
-        entries = self.entries()
-        recent = self.store.snapshot().get("last_sticker_ids", [])
-        for item in entries:
-            text = " ".join([item["id"], item["description"], *item["tags"]]).casefold()
-            item["score"] = sum(term in text for term in terms)
-            item["recently_suggested"] = item["id"] in recent
-        entries = [x for x in entries if not terms or x["score"]]
-        entries.sort(key=lambda x: (-x["score"], x["recently_suggested"], x["id"]))
-        result = entries[:limit]
-        # Track suggestions, not deliveries; never claim an image was actually sent.
-        if query and result:
-            self.store.update(last_sticker_ids=([result[0]["id"]] + recent)[:4])
-        return result
+        items = self.entries()
+        if terms:
+            for item in items:
+                content = " ".join((item["name"], item["group_description"], item["description"], item["folder"])).casefold()
+                item["score"] = sum(x in content for x in terms)
+            items = [x for x in items if x["score"]]
+            items.sort(key=lambda x: (-x["score"], x["source"] != "user", x["id"]))
+        return items[:limit]
 
-    def import_image(self, path: str, description: str, tags: list[str]):
-        if not isinstance(description, str) or not 1 <= len(description.strip()) <= 500:
-            raise LivelyError("Provide a description between 1 and 500 characters.")
-        if (
-            not isinstance(tags, list)
-            or len(tags) > 30
-            or any(not isinstance(t, str) or not 1 <= len(t) <= 60 for t in tags)
-        ):
-            raise LivelyError("Provide at most 30 short text tags.")
-        original = Path(path).expanduser()
-        if not original.is_absolute():
-            raise LivelyError("Import requires an absolute local image path.")
-        if any(p.is_symlink() for p in (original, *original.parents)):
-            raise LivelyError("Import source must not contain symlinks.")
-        fd = os.open(original, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+    def status(self):
+        items = self.entries()
+        return {"builtin_count": sum(x["source"] == "builtin" for x in items),
+                "user_count": sum(x["source"] == "user" for x in items),
+                "folders": sorted({x["folder"] for x in items})}
+
+    def import_image(self, src: str, description: str, folder_name: str = "personal"):
+        if not isinstance(folder_name, str) or not FOLDER.fullmatch(folder_name):
+            raise LivelyError("Use a simple lowercase folder name")
+        if not isinstance(description, str) or not 1 <= len(description.strip()) <= 1000:
+            raise LivelyError("Provide a short sticker description")
+        path = Path(src).expanduser()
+        if not path.is_absolute() or any(part.is_symlink() for part in (path, *path.parents)):
+            raise LivelyError("Use a regular local image file without symlinks")
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
         with os.fdopen(fd, "rb") as stream:
-            info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= MAX_BYTES:
-                raise LivelyError("Import a regular image file no larger than 10 MiB.")
-            content = stream.read(MAX_BYTES + 1)
-        if len(content) > MAX_BYTES:
-            raise LivelyError("Image grew beyond 10 MiB during import.")
-        kind = image_type(content)
-        expected = {"png": {".png"}, "jpeg": {".jpg", ".jpeg"}, "gif": {".gif"}}[kind]
-        if original.suffix.lower() not in expected:
-            raise LivelyError("Image extension does not match its header. Rename/export it correctly.")
-        digest = hashlib.sha256(content).hexdigest()
-        with self.locked() as (_, manifest, items):
-            duplicate = next((x for x in items if x.get("sha256") == digest), None)
-            if duplicate:
-                return self._entry(duplicate, "user", self.directory) | {"duplicate": True}
-            item = {
-                "id": "user-" + uuid.uuid4().hex,
-                "file": f"images/{digest}.{kind}",
-                "description": description.strip(),
-                "tags": tags,
-                "sha256": digest,
+            st = os.fstat(stream.fileno())
+            if not stat.S_ISREG(st.st_mode) or not 0 < st.st_size <= MAX_BYTES:
+                raise LivelyError("File must be a regular image under 10 MiB")
+            payload = stream.read(MAX_BYTES + 1)
+        if len(payload) > MAX_BYTES:
+            raise LivelyError("File is too large")
+        kind = image_kind(payload)
+        if path.suffix.lower() not in {"png": {".png"}, "jpg": {".jpg", ".jpeg"}, "gif": {".gif"}}[kind]:
+            raise LivelyError("Image extension mismatch")
+        name = hashlib.sha256(payload).hexdigest()[:32] + "." + kind
+        with transaction(self.data, create=True):
+            folder = self.personal / folder_name
+            if folder.is_symlink() or self.personal.is_symlink():
+                raise LivelyError("Invalid gallery symlink")
+            folder.mkdir(parents=True, exist_ok=True)
+            info_path = folder / "metadata.json"
+            info = read_group(folder) if info_path.exists() else {
+                "name": folder_name.replace("-", " ").title(), "description": "Personal stickers", "items": {}
             }
-            destination = self.directory / item["file"]
-            if destination.exists() or destination.is_symlink():
-                raise LivelyError(
-                    "Unindexed gallery image already exists. Diagnose the gallery before importing."
-                )
-            atomic_write(destination, content)
+            if name in info["items"]:
+                return {"id": f"user:{folder_name}/{name}", "duplicate": True,
+                        "absolute_path": str(image_path(folder, name))}
+            dest = folder / name
+            if dest.exists() or dest.is_symlink():
+                raise LivelyError("Unindexed gallery image already exists")
+            atomic_bytes(dest, payload)
             try:
-                write_json(manifest, items + [item])
+                info["items"][name] = description.strip()
+                atomic_json(info_path, info)
             except BaseException:
-                destination.unlink(missing_ok=True)
+                dest.unlink(missing_ok=True)
                 raise
-            return self._entry(item, "user", self.directory)
+        return {"id": f"user:{folder_name}/{name}", "absolute_path": str(dest.resolve())}
 
-    def remove(self, sticker_id: str):
-        if not sticker_id.startswith("user-"):
-            raise LivelyError("Only user-imported stickers can be removed.")
-        with self.locked() as (_, manifest, items):
-            match = next((x for x in items if x["id"] == sticker_id), None)
-            if match is None:
-                return {"removed": False, "id": sticker_id}
-            path = checked_file(self.directory, match["file"])
-            if path.parent != (self.directory / "images").resolve():
-                raise LivelyError("Refusing to delete a file outside gallery/images.")
-            write_json(manifest, [x for x in items if x["id"] != sticker_id])
-            # A failed unlink leaves an unindexed file, never a manifest pointing outside the gallery.
+    def remove(self, identifier: str):
+        if not isinstance(identifier, str) or not identifier.startswith("user:"):
+            raise LivelyError("Only personal stickers can be removed")
+        try:
+            folder_name, filename = identifier[5:].split("/", 1)
+        except ValueError as exc:
+            raise LivelyError("Invalid sticker ID") from exc
+        if not FOLDER.fullmatch(folder_name):
+            raise LivelyError("Invalid folder")
+        with transaction(self.data, create=True):
+            folder = self.personal / folder_name
+            if folder.is_symlink():
+                raise LivelyError("Refusing gallery folder symlink")
+            if not (folder / "metadata.json").is_file():
+                return {"removed": False}
+            info = read_group(folder)
+            if filename not in info["items"]:
+                return {"removed": False}
+            path = image_path(folder, filename)
+            del info["items"][filename]
+            atomic_json(folder / "metadata.json", info)
             path.unlink()
-            return {"removed": True, "id": sticker_id}
+            return {"removed": True, "id": identifier}

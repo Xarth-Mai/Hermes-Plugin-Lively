@@ -1,7 +1,7 @@
 [project]
 name = "hermes-plugin-lively"
-version = "0.1.0"
-description = "Proactive contact and local stickers for Hermes"
+version = "0.2.0"
+description = "Proactive contact and folder-based stickers for Hermes"
 requires-python = ">=3.11"
 license = "MPL-2.0"
 

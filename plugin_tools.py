@@ -1,84 +1,75 @@
+"""Small Hermes tool adapters; no channel-specific behavior."""
 from __future__ import annotations
-
 import json
 import logging
-from .common import LivelyError
+from pathlib import Path
+
+from . import gate
+from .stickers import Gallery
 
 logger = logging.getLogger(__name__)
 
 
-def result(fn, args):
+def reply(fn):
     try:
-        if not isinstance(args, dict):
-            raise LivelyError("Tool arguments must be a JSON object.")
-        return json.dumps({"ok": True, **fn(args)}, ensure_ascii=False)
-    except LivelyError as exc:
+        return json.dumps({"ok": True, **fn()}, ensure_ascii=False)
+    except gate.LivelyError as exc:
         return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
     except Exception as exc:
-        # Do not leak private input paths, tokens, or message bodies into logs/tool output.
-        logger.warning("Lively tool failed (%s)", type(exc).__name__)
-        return json.dumps(
-            {
-                "ok": False,
-                "error": "Operation failed safely (" + type(exc).__name__ + "). "
-                "Check file permissions and Profile configuration; run diagnose before re-enabling contact.",
-            }
-        )
+        logger.warning("Lively tool failed: %s", type(exc).__name__)
+        return json.dumps({"ok": False, "error": "Lively operation failed; inspect Profile and file permissions."})
 
 
 class Tools:
-    def __init__(self, contact, gallery):
-        self.contact, self.gallery = contact, gallery
+    def __init__(self, ctx, root: Path, home: Path | None = None):
+        self.ctx, self.root = ctx, root
+        self.data = Path(ctx.state.data_dir)
+        if home is None:
+            from hermes_constants import get_hermes_home
+            home = get_hermes_home()
+        self.home = Path(home).resolve()
 
-    def contact_handler(self, args, **_):
-        return result(self._contact, args)
+    def _prepare(self):
+        if getattr(self.ctx, "current_cron_execution", lambda: None)() is not None:
+            raise gate.LivelyError("Prepare requires an interactive user session")
+        cfg = gate.setup(self.data)
+        template = (self.root / "scripts/lively-gate.py").read_text(encoding="utf-8")
+        binding = {"root": str(self.root), "data": str(self.data), "home": str(self.home)}
+        content = template.replace("BINDING = None", "BINDING = " + repr(binding))
+        path = self.home / "scripts/lively-gate.py"
+        if path.exists() and not path.read_text(encoding="utf-8").startswith("# Managed by Hermes Lively."):
+            raise gate.LivelyError("Refusing to replace an unmanaged script: scripts/lively-gate.py")
+        gate.atomic_bytes(path, content.encode())
+        return {"script": "lively-gate.py", "settings": cfg,
+                "next": "After explicit user authorization, create exactly one native Cron with schedule=23m, script=lively-gate.py, continuity=true, attach_to_session=true, catch_up=false, failure_deliver=local, and a verified native delivery target. Use the installed proactive-contact Skill."}
 
-    def _contact(self, args):
-        action = args.get("action")
-        if action in {"status", "diagnose"}:
-            return self.contact.status(diagnose=action == "diagnose")
-        if action == "configure":
-            return self.contact.configure(args.get("settings", {}))
-        if action == "prepare":
-            return self.contact.prepare(args.get("destination", ""), args.get("authorized", False))
-        if action == "activate":
-            return self.contact.activate(args.get("job_id", ""))
-        if action == "disable":
-            return self.contact.disable()
-        raise LivelyError(
-            "Unknown contact action; use status, configure, prepare, activate, disable or diagnose."
-        )
+    def schedule(self, args, **_):
+        def execute():
+            if not isinstance(args, dict):
+                raise gate.LivelyError("Expected JSON arguments")
+            action = args.get("action")
+            if action == "prepare":
+                return self._prepare()
+            if action == "status":
+                return gate.status(self.data)
+            if action == "tune":
+                return gate.tune(self.data, args.get("settings", {}))
+            raise gate.LivelyError("Use prepare, status or tune")
+        return reply(execute)
 
-    def sticker_handler(self, args, **_):
-        return result(self._stickers, args)
-
-    def _stickers(self, args):
-        action = args.get("action")
-        enabled = self.contact.config()["stickers_enabled"]
-        if action == "status":
-            entries = self.gallery.entries()
-            return {
-                "enabled": enabled,
-                "builtin_count": sum(x["source"] == "builtin" for x in entries),
-                "user_count": sum(x["source"] == "user" for x in entries),
-            }
-        if action in {"list", "search"}:
-            if not enabled and args.get("explicit") is not True:
-                raise LivelyError(
-                    "Stickers are disabled. Only list/search on an explicit user request (explicit=true)."
-                )
-            return {
-                "items": self.gallery.search(
-                    args.get("query", "") if action == "search" else "", args.get("limit", 10)
-                )
-            }
-        if action in {"import", "remove"}:
-            self.contact.guard_owner()
+    def stickers(self, args, **_):
+        def execute():
+            if not isinstance(args, dict):
+                raise gate.LivelyError("Expected JSON arguments")
+            gallery = Gallery(self.root / "assets/stickers", self.data / "gallery", self.data)
+            action = args.get("action")
+            if action == "status":
+                return gallery.status()
+            if action in ("list", "search"):
+                return {"items": gallery.search(args.get("query", "") if action == "search" else "", args.get("limit", 20))}
             if action == "import":
-                return {
-                    "item": self.gallery.import_image(
-                        args.get("path", ""), args.get("description", ""), args.get("tags", [])
-                    )
-                }
-            return self.gallery.remove(args.get("id", ""))
-        raise LivelyError("Unknown sticker action; use status, list, search, import or remove.")
+                return {"item": gallery.import_image(args.get("path", ""), args.get("description", ""), args.get("folder", "personal"))}
+            if action == "remove":
+                return gallery.remove(args.get("id", ""))
+            raise gate.LivelyError("Use status, list, search, import or remove")
+        return reply(execute)
