@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Per-install identity; intentionally survives updates, never distributed.
+.lively-install-id
+.ruff_cache/
+.hermes-contract-source/

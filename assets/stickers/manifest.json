@@ -1,0 +1,54 @@
+[
+  {
+    "id": "sample-greeting",
+    "file": "greeting.png",
+    "description": "Lumi waves hello",
+    "tags": [
+      "hello",
+      "greeting",
+      "你好",
+      "打招呼"
+    ],
+    "source": "builtin",
+    "license": "CC0-1.0; see assets/LICENSE.md"
+  },
+  {
+    "id": "sample-happy",
+    "file": "happy.png",
+    "description": "Lumi celebrates with sparkles",
+    "tags": [
+      "happy",
+      "celebrate",
+      "开心",
+      "庆祝"
+    ],
+    "source": "builtin",
+    "license": "CC0-1.0; see assets/LICENSE.md"
+  },
+  {
+    "id": "sample-confused",
+    "file": "confused.png",
+    "description": "Lumi wonders about a question",
+    "tags": [
+      "confused",
+      "curious",
+      "疑惑",
+      "好奇"
+    ],
+    "source": "builtin",
+    "license": "CC0-1.0; see assets/LICENSE.md"
+  },
+  {
+    "id": "sample-comfort",
+    "file": "comfort.png",
+    "description": "Lumi offers a little heart",
+    "tags": [
+      "comfort",
+      "care",
+      "安慰",
+      "关心"
+    ],
+    "source": "builtin",
+    "license": "CC0-1.0; see assets/LICENSE.md"
+  }
+]

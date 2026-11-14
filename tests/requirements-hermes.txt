@@ -1,0 +1,18 @@
+# Small offline contract-test environment, not runtime plugin dependencies.
+-r ../requirements-dev.txt
+ruamel.yaml==0.18.16
+rich==15.0.0
+filelock==4.2.10
+pydantic==2.13.4
+python-dotenv==1.2.2
+platformdirs==4.14.5
+packaging==26.3
+tzlocal==5.4.5
+croniter==7.0.0
+psutil==7.2.2
+aiohttp==3.14.4
+cryptography==50.0.0
+requests==2.34.2
+httpx==0.28.1
+jinja2==3.1.6
+tenacity==9.2.1

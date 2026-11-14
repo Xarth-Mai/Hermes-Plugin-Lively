@@ -1,0 +1,18 @@
+name: lively
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+kind: standalone
+description: Proactive conversations and expressive stickers for Hermes Agent
+license: MPL-2.0
+homepage: https://github.com/Xarth-Mai/Hermes-Plugin-Lively
+tags: [companion, proactive, stickers]
+provides_tools: [lively_contact, lively_stickers]
+provides_hooks: [post_gateway_admission, pre_llm_call]
+config_schema:
+  proactive_enabled: {type: bool, default: false, description: 'Allow explicitly authorized proactive contact'}
+  proactive_frequency: {type: str, default: occasional, choices: [occasional, regular, clingy], description: 'Hard contact attempt limits'}
+  quiet_hours_enabled: {type: bool, default: true, description: 'Respect local quiet hours'}
+  quiet_start: {type: str, default: '23:00', description: 'Quiet hours start, local HH:MM'}
+  quiet_end: {type: str, default: '08:00', description: 'Quiet hours end, local HH:MM'}
+  stickers_enabled: {type: bool, default: true, description: 'Suggest stickers when appropriate'}

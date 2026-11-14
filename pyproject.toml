@@ -1,0 +1,16 @@
+[project]
+name = "hermes-plugin-lively"
+version = "0.1.0"
+description = "Proactive contact and local stickers for Hermes"
+requires-python = ">=3.11"
+license = "MPL-2.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
