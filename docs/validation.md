@@ -1,5 +1,9 @@
 # v0.2 validation status
 
+## Current release decision — 2026-11-15
+
+Lzz explicitly requested merging/pushing the mainline and installing Lively for both Mai (default) and 小墨 (lxxbot), after receiving the rel2 report and its outstanding real-delivery caveats. Proceed under that revised authorization; do not mislabel the unfinished Discord text/media, transcript attachment, continuity or user-visible rendering tests as passed. Installation is not consent to create a new proactive-contact job for lxxbot or send messages to 欣欣. No extra Gateway restart is included in this request. Earlier BLOCKED/no-install statements below describe historical gates and are superseded only as to the owner's merge/install decision.
+
 ## Mai acceptance run — 2026-11-15 (Asia/Shanghai)
 
 **Release gate: BLOCKED. PR #1 must remain open; do not install or enable a production proactive job on the strength of these checks.** This run was performed directly by Mai, with no delegated agent. The repository was cloned cleanly into `/ssk/Hermes-Plugin-Lively`; remote and branch were checked before changes. The complete `CODEX_HANDOFF.md` was read. Git, not the supplied ZIP, was the implementation authority.
@@ -68,6 +72,14 @@ Pinned Hermes can treat a missing/interpreter-failed/invalid-output gate script 
 - The native plugin admission calls `pm.client.sync_venv` for every candidate selection. `pm.paths.repo_root()` nevertheless resolves from the installed module to `/usr/lib/python3.14/site-packages`; `Venv.expected_stamp()` reads that root's `uv.lock`, and `Venv.apply()` builds a managed dependency generation from that source root. The package contains `pm/uv.lock` (PM's own runtime lock), not the missing core project lock. Those locks are not interchangeable.
 - Thus merely adding a placeholder, copying PM's lock to the core path, or changing the asset-root environment does not repair admission. Even a genuine core lock by itself would not establish that replacing a distro-managed dependency environment is supported. No such workaround, source patch, manual enablement, or Gateway restart was performed.
 - Remaining boundary: repair the externally managed host's native plugin admission/packaging contract before production installation and real delivery acceptance. This is outside Lively's implementation; the existing no-Hermes-source-change constraint remains in force. PR remains unmerged and production remains disabled.
+
+## rel2 continuation — 2026-11-15
+
+- Verified `hermes-package-upgrade-0231-rel2.service`: `Result=success`, `ExecMainStatus=0`; read the entire 375-line transaction log. Both profile doctor completion markers are emitted only for exit 0 (checked the hook implementation); both markers and `completed successfully` are present. No installation or restart was repeated.
+- Installed package is `python-hermes-agent 0.23.1-2`; `pacman -Qkk` reports 9,552 files, zero altered files; pacman lock absent. Snapper transaction pair is 1983/1984. Shared Gateway changed from PID 522052 to 539132. Startup logs confirm default Discord, Weixin, QQBot and webhook connected, and existing lxxbot Weixin connected. These are connection checks, not end-to-end tests of every platform.
+- Exact feature head remains `28bb8b7e9fdfc0d34f9aa10a45050cf43167ce39`; PR #1 is OPEN, with all eight remote checks successful. Current host rerun: 19 unit tests passed, four PNG assets validated, `git diff --check` clean; native Plugin Doctor reports two tools and zero hooks.
+- With BOTH HOME and HERMES_HOME isolated, native install of the exact local Git revision with `--enable` succeeded and `plugins show lively` read back enabled 0.2.0. Local native Cron lifecycle passed paused create/readback → resume/readback → pause/readback → remove. This proves the former packaged-admission blocker is resolved for this revision; the test used local Git, not the remote one-liner.
+- This continuation has NOT yet exercised real Discord text/media delivery, target transcript attachment, recurring continuity or user-side rendering. These remain outstanding acceptance work, not a newly diagnosed host failure. No production Lively installation, proactive job, merge, push or branch deletion was performed. Original completed-task origins were read to recover the authorized DM target; no send occurred. Production activation remains gated on the outstanding native delivery/context evidence. No further Gateway restart was performed.
 
 ## Earlier handoff results (historical only)
 
