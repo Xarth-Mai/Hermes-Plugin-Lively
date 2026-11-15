@@ -53,7 +53,7 @@ hermes plugins install Xarth-Mai/Hermes-Plugin-Lively --enable
 - **原生能力有边界**：脚本自身完全无法运行时，部分 Hermes 版本仍可能唤醒模型；真实平台的图片呈现与会话续聊需要实机验收
 - **普通聊天不受影响**：插件仅增加选择性主动联系与图库能力，不干预已有任务
 
-高级配置、迁移和验收见 [安装指南](INSTALL.md)、[迁移说明](docs/migration.md) 和 [验证记录](docs/validation.md)。
+高级配置、迁移与验证范围见 [安装指南](INSTALL.md)、[迁移说明](docs/migration.md) 和 [验证状态](docs/validation.md)。
 
 ## 许可证
 

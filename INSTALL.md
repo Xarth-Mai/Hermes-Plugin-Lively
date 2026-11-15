@@ -18,7 +18,7 @@
    ```
 
 3. 按 Hermes 当前版本要求重载插件并开始新会话，检查 `lively_schedule`、`lively_stickers` 和两份 Skill 是否注册。需要时显式加载 `skill_view("lively:proactive-contact")` 与 `skill_view("lively:sticker-gallery")`。注册成功不等于旧会话已经获得新提示。
-4. 确认插件版本至少为 `0.2.0`、当前 Profile 的 Python ≥3.11，并检查插件状态。如果版本或工具不符合文档，使用真实安装版本的能力，勿假装新功能可用。
+4. 对照仓库 `plugin.yaml` 检查实际安装版本、当前 Profile 的 Python ≥3.11 和插件状态。当前主线版本为 `0.2.1`，共享图库需要 `0.2.1+`。如果工具或版本不符合文档，以真实安装的能力为准。
 
 ## 2. 首次引导
 
