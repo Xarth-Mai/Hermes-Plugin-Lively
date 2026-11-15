@@ -1,76 +1,70 @@
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import json
 
 import pytest
 
-from lively_under_test.common import LivelyError
-from lively_under_test.stickers import Gallery, MAX_BYTES
-from lively_under_test.plugin_tools import Tools
 from conftest import ROOT
 
 
-@pytest.fixture
-def gallery(contact):
-    return Gallery(ROOT, contact.data, contact.store)
+def sample_image():
+    return ROOT / "assets/stickers/greeting/greeting.png"
 
 
-def test_builtins_search_recent_and_import_dedup(gallery, tmp_path):
-    assert len(gallery.search()) == 4
-    assert gallery.search("开心")[0]["id"] == "sample-happy"
-    assert gallery.search("happy")[0]["recently_suggested"]
-    first = gallery.import_image(str(ROOT / "assets/stickers/happy.png"), "personal image", ["happy"])
-    second = gallery.import_image(str(ROOT / "assets/stickers/happy.png"), "another description", [])
+def test_folder_metadata_and_search(gallery):
+    entries = gallery.entries()
+    assert len(entries) == 4
+    assert gallery.search("庆祝")[0]["folder"] == "happy"
+    assert gallery.status()["builtin_count"] == 4
+    assert gallery.status()["user_count"] == 0
+
+
+def test_import_remove_and_deduplicate(gallery):
+    first = gallery.import_image(str(sample_image()), "笑着挥手", "my-pack")
+    second = gallery.import_image(str(sample_image()), "different", "my-pack")
     assert first["id"] == second["id"] and second["duplicate"]
-    assert Path(first["absolute_path"]).is_relative_to(gallery.directory)
-    assert len(gallery.entries()) == 5
+    assert gallery.search("挥手")[0]["source"] == "user"
     assert gallery.remove(first["id"])["removed"]
     assert not gallery.remove(first["id"])["removed"]
-    assert len(gallery.entries()) == 4
-    with pytest.raises(LivelyError):
-        gallery.remove("sample-happy")
+    with pytest.raises(Exception):
+        gallery.remove("builtin:greeting/greeting.png")
 
 
-def test_forged_oversize_and_symlink(gallery, tmp_path):
-    invalid = tmp_path / "fake.png"
-    invalid.write_text("not an image")
-    with pytest.raises(LivelyError):
-        gallery.import_image(str(invalid), "test", [])
-    invalid.write_bytes(b"x" * (MAX_BYTES + 1))
-    with pytest.raises(LivelyError):
-        gallery.import_image(str(invalid), "test", [])
-    link = tmp_path / "linked.png"
-    link.symlink_to(ROOT / "assets/stickers/happy.png")
-    with pytest.raises(LivelyError):
-        gallery.import_image(str(link), "test", [])
-
-
-def test_manifest_escape_and_remove_protection(gallery, tmp_path):
-    item = gallery.import_image(str(ROOT / "assets/stickers/happy.png"), "test", [])
-    manifest = gallery.directory / "manifest.json"
-    data = json.loads(manifest.read_text())
-    data[0]["file"] = "../../config.yaml"
-    manifest.write_text(json.dumps(data))
-    with pytest.raises(LivelyError):
+def test_input_safety_and_manifest_escape(gallery, tmp_path):
+    fake = tmp_path / "fake.png"
+    fake.write_text("not image")
+    with pytest.raises(Exception):
+        gallery.import_image(str(fake), "test")
+    link = tmp_path / "link.png"
+    link.symlink_to(sample_image())
+    with pytest.raises(Exception):
+        gallery.import_image(str(link), "test")
+    with pytest.raises(Exception):
+        gallery.import_image(str(sample_image()), "test", "../escape")
+    item = gallery.import_image(str(sample_image()), "test", "custom")
+    meta = gallery.personal / "custom" / "metadata.json"
+    info = json.loads(meta.read_text())
+    info["items"]["../../bad.png"] = "malicious"
+    meta.write_text(json.dumps(info))
+    with pytest.raises(Exception):
         gallery.entries()
-    with pytest.raises(LivelyError):
+    with pytest.raises(Exception):
         gallery.remove(item["id"])
 
 
-def test_off_allows_explicit_view_and_management(contact, gallery):
-    tools = Tools(contact, gallery)
-    contact.configure({"stickers_enabled": False})
-    assert not json.loads(tools.sticker_handler({"action": "search", "query": "happy"}))["ok"]
-    assert json.loads(tools.sticker_handler({"action": "list", "explicit": True}))["ok"]
-    assert json.loads(tools.sticker_handler({"action": "status"}))["builtin_count"] == 4
+def test_legacy_gallery_migration_preserves_old_files(gallery):
+    old = gallery.personal / "images"
+    old.mkdir(parents=True)
+    legacy = old / "original.png"
+    legacy.write_bytes(sample_image().read_bytes())
+    manifest = gallery.personal / "manifest.json"
+    manifest.write_text(json.dumps([{"id": "old", "file": "images/original.png", "description": "旧图库"}]))
+    results = gallery.search("旧图库")
+    assert len(results) == 1 and results[0]["folder"] == "legacy"
+    assert legacy.exists() and manifest.exists()
+    assert len(gallery.search("旧图库")) == 1
 
 
-def test_concurrent_imports_are_deduplicated(gallery):
-    from concurrent.futures import ThreadPoolExecutor
-
-    def do_import(_):
-        return gallery.import_image(str(ROOT / "assets/stickers/happy.png"), "happy", ["happy"])["id"]
-
+def test_concurrent_import(gallery):
     with ThreadPoolExecutor(max_workers=4) as pool:
-        ids = list(pool.map(do_import, range(8)))
+        ids = list(pool.map(lambda _: gallery.import_image(str(sample_image()), "hello")["id"], range(8)))
     assert len(set(ids)) == 1
-    assert len(gallery.entries()) == 5

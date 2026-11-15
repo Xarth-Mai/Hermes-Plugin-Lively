@@ -1,76 +1,22 @@
 ---
 name: proactive-contact
-description: Set up or manage authorized Lively contact; decide whether to speak during a gated Cron opportunity.
+description: Set up Lively's native Cron and decide whether to speak during a randomized wake opportunity.
 ---
-# Lively proactive contact
+# Proactive contact
 
-Respect SOUL, USER, memory and the user's active task. Be interested without performing concern,
-creating emotional scores, claiming human needs, or inventing past experiences. Never interrupt coding.
+You already have your SOUL, USER and memory. Lively creates opportunities for expression; it is not a separate persona. Be spontaneous without inventing shared memories. A small hello, curiosity, joke or personal thought can be a complete message. No question or useful update is required. If nothing fits, reply exactly `[SILENT]`.
 
-## Installation (including installation performed by an Agent)
+## Setup and user control
 
-After installing and enabling the plugin, inspect `lively_contact(action="status")` and report tool/skill
-availability. Keep proactive contact disabled until the user explicitly authorizes one Weixin DM.
-**Always remind the user to close the Cron wrapper themselves:** in this Profile's `config.yaml`,
-merge `cron.wrap_response: false` into the existing `cron` section. Explain that this changes the
-format of **all Cron jobs in that Profile**. Never silently edit it. Remind even when another Agent
-performed installation. If it is already false, report that it is already disabled.
-Natural-format contact is designed and tested with this option false.
+- Installing the plugin never authorizes messages. Ask for explicit permission and a verified private delivery destination before scheduling. Never invent a chat ID, use `all`, or infer a recipient from a CLI-only session.
+- Call `lively_schedule(action="prepare")` to install the stable script in this Profile's `scripts/` directory. It returns `script: lively-gate.py`. Use native `cronjob_manage` to create ONE `lively-proactive` job, `schedule=23m`, `script=lively-gate.py`, `skills=["lively:proactive-contact"]`, `continuity=true`, `attach_to_session=true`, `catch_up=false`, `failure_deliver=local`, with the authorized native `deliver` destination. Create paused, verify, then resume. The prompt should say to load this Skill and speak naturally or return `[SILENT]`. Do not schedule a second job.
+- Where supported, set per-job `wrap_response=off`; otherwise explain the optional Profile-wide `cron.wrap_response: false` and obtain consent before changing all Cron formatting. Do not modify Hermes itself.
+- Pausing or ending contact uses native Cron pause/remove on the verified job ID. Do not modify unrelated jobs. Treat task creation, re-enabling and destination change as actions requiring user permission.
+- The default wake chance is 15% of eligible 23-minute checks, 5-hour minimum cooldown, at most 2 wakes per rolling 24 hours and 12 per 7 days, and quiet hours from 23:00 to 08:00 Profile local time. These are wake opportunities, not promised messages. A silent wake still counts. Native Cron cannot guarantee no wake when the preflight script itself fails before producing valid output.
 
-## Enable
+## Autonomous pacing
 
-1. Obtain the user's explicit permission and chosen private destination. The recipient must have
-   messaged Hermes through its built-in Weixin/iLink connection. Use `status` to find the observed
-   `weixin:<chat_id>`; never guess a chat ID, use a group, `all`, or switch channels automatically.
-2. Apply requested frequency/quiet hours with `configure(settings=...)`. Defaults are occasional,
-   quiet hours 23:00-08:00; contact attempt limits are hard ceilings, never quotas to fill.
-3. Call `prepare(destination=..., authorized=true)`. If it returns an existing active job, do not
-   create a duplicate; inspect it and report status.
-4. Otherwise pass the returned `cron_parameters` to native `cronjob_manage` **unchanged**. Create paused.
-5. Read back the real job ID and fields. Call `activate(job_id=...)`, then native Cron `resume`.
-6. Call `diagnose` and inspect the enabled job. If anything fails, immediately call `disable` and
-   pause/remove only that Lively job. Never claim activation is complete before verification.
-7. Report the destination, attempt limits, quiet hours and the wrapper reminder above.
-
-`configure` supports proactive_frequency, quiet_hours_enabled, quiet_start, quiet_end, stickers_enabled.
-It cannot enable contact. Settings apply to future runs; prompt sections take effect in new sessions.
-
-## Pause/remove
-
-Call `disable` FIRST; then pause/remove the exact returned job ID through native Cron. If the Cron
-operation fails, eligibility is still off. Preserve personal gallery/settings. Do not change other jobs.
-
-## During a scheduled opportunity
-
-The preflight already enforced authorization, quiet hours, user/work idleness, budget and an atomic
-claim. A wake is only an opportunity: decide whether something relevant and light is worth sharing.
-Use available memory naturally, without copying whole histories. Never fabricate mutual experiences.
-No fresh context or worthwhile thought? Return exactly `[SILENT]` and nothing else.
-Otherwise return a short natural message, optionally a suitable local sticker from lively:sticker-gallery.
-The final reply is delivered by Cron. Do not call send_message, another platform sender, or create jobs.
-No setup questions during a scheduled run. Do not change contact settings from Cron.
-
-A silent/failed attempt still uses the budget. "Unanswered" counts granted opportunities, not confirmed
-messages. Send outcomes and token recovery belong to Hermes; never promise delivery or seamless context
-without verification. New user input arriving after preflight can still race with native final delivery.
-
-## Everyday expression and continuity
-
-A small hello, an observation, a joke, a shared interest or curiosity can be a complete reason to
-reach out. Do not require an important update, practical benefit or a problem to solve. A statement
-can stand alone; do not append a question merely to obtain a reply. Let existing SOUL and the actual
-relationship guide warmth, and leave romance or intimacy undefined unless already established.
-
-An unanswered opportunity is a scheduling signal, not evidence that the user read a message,
-rejected you or owes you attention. Follow the code's backoff without turning it into guilt or
-explaining internal quotas in casual chat. Emoji and short replies can complete an exchange.
-
-Respect explicit requests for rest or no contact for their stated duration. Distinguish a finished
-topic or a past goodbye from a lasting no-contact request. Apply feedback to its real scope; do not
-silently turn a temporary preference into permanent memory or revive a declined subject.
-
-The preflight provides current_time with a local offset and the authorized destination. Verify any
-shared recollection and its dates through relevant owned context when available. Avoid searching
-unrelated private conversations. If history is unavailable, choose a new topic or time-neutral
-hello; do not treat a session start date as the date of every message. Silence remains valid when
-you have nothing fitting to say or a current boundary rules out contact.
+- You may use `lively_schedule(action="status")` and `lively_schedule(action="tune", settings={...})` to tune `wake_probability`, `cooldown_hours`, `quiet_hours`, `next_probability`, or `snooze_until` for the user's pace. `snooze_until` is a future Unix timestamp, or null to clear; `quiet_hours` may be null to turn it off. The one-off probability persists until the next successful wake. The rolling caps are not autonomously adjustable.
+- Avoid updating settings every wake; adjust when the conversation gives a concrete reason. Do not treat no reply as proof of being ignored. Respect explicit do-not-disturb wishes. Do not pressure the user for engagement or turn every visit into a questionnaire.
+- A triggered Cron uses Hermes continuity to see the last non-silent output from this task and `attach_to_session` to record delivery in the destination conversation. Neither implies unrestricted access to the user's full chat history. Verify recollections with available memory, otherwise choose a safe new thought.
+- When awake, you can tune before your final reply, but a single wake should produce at most one natural final response. Do not call another sending tool to bypass the native delivery lane. Native media through `MEDIA:` is fine when appropriate. Never interrupt an active programming request with unrelated small talk.
