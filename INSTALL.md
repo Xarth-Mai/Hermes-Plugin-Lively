@@ -58,7 +58,7 @@
 
 ## 可选：多个 Profile 共用图库（0.2.1+）
 
-由所有者指定一个真实的共享目录，为每个 Profile 的 `plugin-data/lively/gallery` 创建指向该目录的软链接，然后使用原生配置命令设置：
+由所有者指定一个真实的共享目录，为每个 Profile 的 `ctx.state.data_dir / "gallery"` 创建指向该目录的软链接（先从原生 PluginContext 取得 data_dir，不要猜测命名空间；新版 Hermes 可能使用 `plugin-data/agent-plugin-lively-<hash>/`），然后使用原生配置命令设置：
 
 ```bash
 hermes --profile <profile> config set plugins.entries.lively.settings.shared_gallery /absolute/shared/gallery
