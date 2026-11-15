@@ -56,6 +56,16 @@
 
 **上下文区别**：`attach_to_session: true` 使主动回复写入目标聊天的会话历史；`continuity: true` 把当前 Cron 上一次非静默输出提供给下一次运行。它们不自动读取任意渠道的完整聊天记录。`catch_up: false` 防止 Gateway 重启后补跑过期机会；`failure_deliver: local` 避免把运行错误发送给用户。
 
+## 可选：多个 Profile 共用图库（0.2.1+）
+
+由所有者指定一个真实的共享目录，为每个 Profile 的 `plugin-data/lively/gallery` 创建指向该目录的软链接，然后使用原生配置命令设置：
+
+```bash
+hermes --profile <profile> config set plugins.entries.lively.settings.shared_gallery /absolute/shared/gallery
+```
+
+共享目录及其父目录必须是真实目录；Profile 的 gallery 必须是指向该精确目录的软链接。只有显式设置此项才接受图库根链接，图片、分类目录和 metadata 的软链接仍被拒绝。图库写操作使用共享目录的 `.lively-state` 锁，主动联系的设置、配额与记录仍各归自己的 Profile。导入、删除对所有共用者生效，应先确认图库所有者的授权；这不授权跨 Profile 读取聊天或自动投递。不要把私人图库提交到插件仓库。
+
 ## 4. 日常使用
 
 Agent 可以在适当的时候调用 `lively_schedule(action="tune", settings={...})` 调节 `wake_probability`、`cooldown_hours`、`quiet_hours`，或用 `next_probability` / `snooze_until` 调节下一次机会。概率 0–1，冷却 4–168 小时；`snooze_until` 是未来 30 天内的 Unix 时间戳或 null。临时概率直到下一次成功唤醒后才清除。

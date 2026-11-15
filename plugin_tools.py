@@ -61,7 +61,18 @@ class Tools:
         def execute():
             if not isinstance(args, dict):
                 raise gate.LivelyError("Expected JSON arguments")
-            gallery = Gallery(self.root / "assets/stickers", self.data / "gallery", self.data)
+            personal, lock_data = self.data / "gallery", self.data
+            shared = getattr(self.ctx, "get_config", lambda key, default=None: default)("shared_gallery", None)
+            if shared is not None:
+                if not isinstance(shared, str) or not Path(shared).is_absolute():
+                    raise gate.LivelyError("shared_gallery must be an absolute directory")
+                target = Path(shared)
+                if not target.is_dir() or any(p.is_symlink() for p in (target, *target.parents)):
+                    raise gate.LivelyError("shared_gallery must name a real directory without symlinks")
+                if not personal.is_symlink() or personal.resolve(strict=True) != target.resolve(strict=True):
+                    raise gate.LivelyError("Gallery link must match the configured shared_gallery")
+                personal, lock_data = target, target / ".lively-state"
+            gallery = Gallery(self.root / "assets/stickers", personal, lock_data)
             action = args.get("action")
             if action == "status":
                 return gallery.status()
